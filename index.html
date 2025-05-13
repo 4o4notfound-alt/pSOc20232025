@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Grafik Oura dengan Chart.js</title>
+    <!-- Memuat Chart.js dari CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Plugin anotasi untuk Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.1.0"></script>
+    <!-- Adapter tanggal untuk Chart.js (memungkinkan sumbu waktu) -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      h1 {
+        text-align: center;
+      }
+      .controls {
+        margin-bottom: 20px;
+      }
+      .toggle-container {
+        margin: 10px 0 20px;
+      }
+      #chart-container {
+        width: 100%;
+        max-width: 900px;
+        height: 500px;
+        margin: auto;
+      }
+      label {
+        margin-right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Grafik Oura (Data CFS) dengan Chart.js</h1>
+    
+    <!-- Filter Waktu -->
+    <div class="controls">
+      <label for="start-date">Mulai Tanggal:</label>
+      <input type="date" id="start-date" />
+      <label for="end-date">Sampai Tanggal:</label>
+      <input type="date" id="end-date" />
+      <button id="filter-btn">Terapkan Filter</button>
+    </div>
+
+    <!-- Toggle Dataset -->
+    <div class="toggle-container">
+      <strong>Toggle Dataset:</strong><br />
+      <input type="checkbox" id="toggle-total_sleep_duration" checked />
+      <label for="toggle-total_sleep_duration">Total Sleep Duration</label>
+      <input type="checkbox" id="toggle-deep_sleep" checked />
+      <label for="toggle-deep_sleep">Deep Sleep</label>
+      <input type="checkbox" id="toggle-activity_score" checked />
+      <label for="toggle-activity_score">Activity Score</label>
+      <input type="checkbox" id="toggle-steps" checked />
+      <label for="toggle-steps">Steps</label>
+      <input type="checkbox" id="toggle-resting_heart_rate" checked />
+      <label for="toggle-resting_heart_rate">Resting Heart Rate</label>
+      <input type="checkbox" id="toggle-hrv" checked />
+      <label for="toggle-hrv">HRV</label>
+    </div>
+
+    <!-- Canvas untuk Chart -->
+    <div id="chart-container">
+      <canvas id="myChart"></canvas>
+    </div>
+
+    <script>
+      // Inisialisasi variabel global
+      let sampleData = [];
+      let filteredData = [];
+      let myChart = null;
+      
+      // Tanggal error (Device error start)
+      const errorDate = new Date("2024-11-15");
+
+      // Warna untuk masing-masing dataset
+      const datasetColors = {
+        total_sleep_duration: "blue",
+        deep_sleep: "green",
+        activity_score: "orange",
+        steps: "purple",
+        resting_heart_rate: "red",
+        hrv: "teal"
+      };
+
+      // Fungsi memuat data dari file JSON
+      async function loadData() {
+        try {
+          const response = await fetch("data.json");
+          sampleData = await response.json();
+          // Pastikan data tanggal menjadi objek Date
+          sampleData.forEach(d => {
+            d.date = new Date(d.date);
+          });
+          // Set nilai default filter berdasarkan data yang tersedia
+          const minDate = sampleData[0].date;
+          const maxDate = sampleData[sampleData.length - 1].date;
+          document.getElementById("start-date").value = minDate.toISOString().split("T")[0];
+          document.getElementById("end-date").value = maxDate.toISOString().split("T")[0];
+          
+          updateFilteredData();
+          buildChart();
+        } catch (error) {
+          console.error("Error saat memuat data dari data.json:", error);
+        }
+      }
+
+      // Fungsi filter data berdasarkan input tanggal
+      function updateFilteredData() {
+        const startInput = document.getElementById("start-date").value;
+        const endInput = document.getElementById("end-date").value;
+        const startDateFilter = new Date(startInput);
+        const endDateFilter = new Date(endInput);
+        filteredData = sampleData.filter(d =>
+          d.date >= startDateFilter && d.date <= endDateFilter
+        );
+      }
+
+      // Fungsi mengonversi data filtered ke format dataset untuk Chart.js
+      function buildDatasets() {
+        const metrics = [
+          "total_sleep_duration",
+          "deep_sleep",
+          "activity_score",
+          "steps",
+          "resting_heart_rate",
+          "hrv"
+        ];
+        return metrics.map(metric => {
+          return {
+            label: metric,
+            data: filteredData.map(d => ({ x: d.date, y: d[metric] })),
+            borderColor: datasetColors[metric],
+            backgroundColor: datasetColors[metric],
+            tension: 0.1,
+            fill: false,
+          };
+        });
+      }
+
+      // Fungsi membangun Chart.js
+      function buildChart() {
+        const ctx = document.getElementById("myChart").getContext("2d");
+        const chartDatasets = buildDatasets();
+
+        // Konfigurasi chart
+        const chartConfig = {
+          type: "line",
+          data: {
+            datasets: chartDatasets,
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            parsing: false,
+            scales: {
+              x: {
+                type: "time",
+                time: {
+                  unit: "day",
+                },
+                title: {
+                  display: true,
+                  text: "Tanggal",
+                },
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "Nilai",
+                },
+              },
+            },
+            plugins: {
+              annotation: {
+                annotations: {
+                  errorLine: {
+                    type: "line",
+                    xMin: errorDate,
+                    xMax: errorDate,
+                    borderColor: "red",
+                    borderWidth: 2,
+                    borderDash: [6, 6],
+                    label: {
+                      content: "Device Error Start",
+                      enabled: true,
+                      position: "start",
+                    },
+                  },
+                },
+              },
+              tooltip: {
+                mode: "index",
+                intersect: false,
+              },
+              legend: {
+                display: true,
+              },
+            },
+            interaction: {
+              mode: "nearest",
+              intersect: false,
+            },
+          },
+        };
+
+        // Jika chart sudah ada, hancurkan dulu sebelum membuat yang baru
+        if (myChart) {
+          myChart.destroy();
+        }
+        myChart = new Chart(ctx, chartConfig);
+      }
+
+      // Fungsi untuk mengupdate chart ketika filter berubah
+      function updateChart() {
+        updateFilteredData();
+        // Perbarui masing-masing dataset
+        const newDatasets = buildDatasets();
+        myChart.data.datasets.forEach((ds, index) => {
+          ds.data = newDatasets[index].data;
+        });
+        myChart.update();
+      }
+
+      // Fungsi toggle dataset berdasarkan checkbox
+      function toggleDataset(metric, checkboxId) {
+        const checkbox = document.getElementById(checkboxId);
+        const datasetIndex = myChart.data.datasets.findIndex(ds => ds.label === metric);
+        if (datasetIndex > -1) {
+          myChart.data.datasets[datasetIndex].hidden = !checkbox.checked;
+          myChart.update();
+        }
+      }
+
+      // Event listener untuk tombol filter
+      document.getElementById("filter-btn").addEventListener("click", updateChart);
+
+      // Event listener untuk masing-masing checkbox toggle
+      document.getElementById("toggle-total_sleep_duration").addEventListener("change", function() {
+        toggleDataset("total_sleep_duration", "toggle-total_sleep_duration");
+      });
+      document.getElementById("toggle-deep_sleep").addEventListener("change", function() {
+        toggleDataset("deep_sleep", "toggle-deep_sleep");
+      });
+      document.getElementById("toggle-activity_score").addEventListener("change", function() {
+        toggleDataset("activity_score", "toggle-activity_score");
+      });
+      document.getElementById("toggle-steps").addEventListener("change", function() {
+        toggleDataset("steps", "toggle-steps");
+      });
+      document.getElementById("toggle-resting_heart_rate").addEventListener("change", function() {
+        toggleDataset("resting_heart_rate", "toggle-resting_heart_rate");
+      });
+      document.getElementById("toggle-hrv").addEventListener("change", function() {
+        toggleDataset("hrv", "toggle-hrv");
+      });
+
+      // Panggil loadData saat halaman termuat
+      loadData();
+    </script>
+  </body>
+</html>
